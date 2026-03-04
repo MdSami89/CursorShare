@@ -1,18 +1,22 @@
 # CursorShare
 
-**Kernel-Assisted Ultra-Low-Latency Bluetooth HID Redirect System**
+**Ultra-Low-Latency Bluetooth HID Redirect System**
 
-CursorShare turns a Windows PC into a Bluetooth Classic HID transmitter, forwarding wired keyboard and mouse input to any Bluetooth-capable client device (phone, tablet, PC, smart TV). The client sees a standard Bluetooth keyboard + mouse — **no software install required**.
+CursorShare turns a Windows PC into a Bluetooth HID peripheral, forwarding wired keyboard and mouse input to any Bluetooth-capable client device (phone, tablet, PC, smart TV). The client sees a standard Bluetooth keyboard + mouse — **no software install required on the client**.
 
 ## Features
 
-- **Bluetooth Classic HID** — Appears as a standard keyboard + mouse combo device
-- **Raw Input API Capture** — User-mode fallback requiring no driver installation
+- **BLE HID over GATT** — Appears as a standard BLE keyboard + mouse (Windows 10+ C++/WinRT)
+- **Bluetooth Classic HID** — Legacy SDP/L2CAP path for older clients
+- **Exclusive Input Mode** — Low-level hooks suppress host input when routing to client, ensuring input goes to only one device at a time
+- **Proper HID Scan Code Mapping** — Full Windows scan code → USB HID usage code lookup table (256 entries + E0-prefixed keys)
+- **Raw Input API Capture** — User-mode capture requiring no driver installation
 - **KMDF Filter Drivers** — Kernel-mode capture for ultra-low latency (< 0.5 ms)
-- **Lock-Free Ring Buffers** — Zero-allocation event pipeline
+- **Lock-Free Ring Buffers** — Zero-allocation SPSC event pipeline
 - **Boundary-Aware Mouse** — Edge clamping to client display resolution
 - **Global Shortcut** — Instant input switching (Ctrl+Alt+S)
 - **Latency Monitoring** — Per-stage QPC-based timing (min/avg/p99/max)
+- **File-Based Logging** — Thread-safe singleton logger with 6 levels, log rotation (5 MB max, 3 backups), millisecond timestamps
 - **Safe Shutdown** — Full system state restoration, paired-device preservation
 - **Cross-Platform Clients** — Windows, Android, macOS, Smart TVs
 
@@ -20,50 +24,54 @@ CursorShare turns a Windows PC into a Bluetooth Classic HID transmitter, forward
 
 | Stage | Target |
 |-------|--------|
-| Hardware interrupt → driver | < 0.5 ms |
+| Hardware interrupt → capture | < 0.5 ms |
 | Routing decision | < 0.1 ms |
-| HID encoding | < 0.2 ms |
-| Bluetooth transmission | 3–7 ms |
+| HID encoding + scan code mapping | < 0.2 ms |
+| BLE GATT notification | 3–7 ms |
 | **Total** | **3–8 ms typical** |
 
 ## Prerequisites
 
 - **Windows 10/11** (x64)
-- **Visual Studio 2022** with:
+- **Visual Studio 2022 Build Tools** with:
   - C++ Desktop Development workload
-  - Windows SDK (10.0.22621+)
+  - Windows SDK (10.0.26100+)
+  - C++/WinRT headers
 - **CMake 3.20+**
-- **Bluetooth adapter** with Bluetooth Classic (BR/EDR) support
+- **Bluetooth adapter** with BLE peripheral role support
 
 ### Optional (for kernel drivers)
 
 - **Windows Driver Kit (WDK)** matching the SDK version
 - **Test-signing mode** enabled: `bcdedit /set testsigning on`
-- **EV code-signing certificate** for production deployment
 
 ## Quick Start
 
-### Build (User-Mode Components)
+### Build
 
 ```powershell
-# From CursorShare root directory
+# Open a VS Developer Command Prompt (or call vcvars64.bat first)
 mkdir build
 cd build
-cmake .. -G "Visual Studio 17 2022" -A x64
+cmake .. -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Release
 cmake --build . --config Release
 ```
+
+Pre-built executables are placed in the `dist/` folder.
 
 ### Run
 
 ```powershell
-.\build\Release\CursorShare.exe
+# From dist/ or build/ folder
+.\CursorShare.exe
 ```
 
-### Commands
+### Interactive Commands
 
 | Command | Description |
 |---------|-------------|
-| `start` | Start Bluetooth broadcasting |
+| `start` | Start Bluetooth Classic broadcasting |
+| `ble` | Start BLE HID advertising (recommended) |
 | `stop` | Stop broadcasting |
 | `switch` | Toggle input routing (Host ↔ Client) |
 | `status` | Show current status |
@@ -71,72 +79,74 @@ cmake --build . --config Release
 | `latency` | Show latency statistics |
 | `devices` | List connected devices |
 | `paired` | List paired devices |
+| `help` | Show all commands |
 | `quit` | Shutdown and exit |
 
-### Bluetooth Diagnostics
+### Diagnostic Tools
 
 ```powershell
-.\build\Release\BtDiagnostic.exe
+.\BtDiagnostic.exe        # Validate Bluetooth adapter compatibility
+.\LatencyBenchmark.exe     # Measure pipeline latency
 ```
 
-### Latency Benchmark
-
-```powershell
-.\build\Release\LatencyBenchmark.exe
-```
+Both tools write to `cursorshare.log` alongside the executable.
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    Windows Host PC                       │
-│                                                          │
-│  ┌──────────────┐   ┌──────────────┐   ┌─────────────┐ │
-│  │  Keyboard     │   │  Mouse        │   │  UI (WPF)   │ │
-│  │  (HW Device)  │   │  (HW Device)  │   │  Named Pipe │ │
-│  └──────┬───────┘   └──────┬───────┘   └──────┬──────┘ │
-│         │                   │                   │        │
-│  ┌──────┴───────────────────┴───────┐          │        │
-│  │  Input Capture Layer              │          │        │
-│  │  ┌─────────────┐ ┌─────────────┐ │          │        │
-│  │  │ KMDF Filter  │ │ Raw Input   │ │          │        │
-│  │  │ Driver       │ │ API         │ │          │        │
-│  │  └──────┬──────┘ └──────┬──────┘ │          │        │
-│  │         │ Shared Mem     │ Ring    │          │        │
-│  │         └────────┬───────┘ Buffer │          │        │
-│  └──────────────────┼────────────────┘          │        │
-│                     ▼                           │        │
-│  ┌─────────────────────────────┐                │        │
-│  │  Input Router                │◄──────────────┘        │
-│  │  (Host/Client switching)     │                         │
-│  │  Global Shortcut Handler     │                         │
-│  └─────────────┬───────────────┘                         │
-│                │                                          │
-│  ┌─────────────▼───────────────┐                         │
-│  │  Mouse Boundary Handler      │                         │
-│  │  (Edge clamping)             │                         │
-│  └─────────────┬───────────────┘                         │
-│                │                                          │
-│  ┌─────────────▼───────────────┐                         │
-│  │  HID Report Encoder          │                         │
-│  │  (Keyboard 6KRO + Mouse)     │                         │
-│  └─────────────┬───────────────┘                         │
-│                │                                          │
-│  ┌─────────────▼───────────────┐                         │
-│  │  Bluetooth HID Service       │                         │
-│  │  ┌──────────┐ ┌───────────┐ │                         │
-│  │  │ L2CAP    │ │ SDP       │ │                         │
-│  │  │ Channels │ │ Record    │ │                         │
-│  │  └──────────┘ └───────────┘ │                         │
-│  └─────────────┬───────────────┘                         │
-│                │ Bluetooth Classic                        │
-└────────────────┼─────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│                    Windows Host PC                        │
+│                                                           │
+│  ┌──────────────┐   ┌──────────────┐   ┌──────────────┐ │
+│  │  Keyboard     │   │  Mouse        │   │  UI (future) │ │
+│  │  (HW Device)  │   │  (HW Device)  │   │  Named Pipe  │ │
+│  └──────┬───────┘   └──────┬───────┘   └──────┬───────┘ │
+│         │                   │                   │         │
+│  ┌──────┴───────────────────┴───────┐          │         │
+│  │  Input Capture Layer              │          │         │
+│  │  ┌─────────────┐ ┌─────────────┐ │          │         │
+│  │  │ KMDF Filter  │ │ Raw Input   │ │          │         │
+│  │  │ Driver       │ │ API         │ │          │         │
+│  │  └──────┬──────┘ └──────┬──────┘ │          │         │
+│  │         └────────┬──────┘        │          │         │
+│  └──────────────────┼───────────────┘          │         │
+│                     ▼                           │         │
+│  ┌──────────────────────────────┐               │         │
+│  │  Input Router                │◄──────────────┘         │
+│  │  Host/Client switching       │                          │
+│  │  Exclusive Mode (LL Hooks)   │                          │
+│  └─────────────┬────────────────┘                          │
+│                │                                           │
+│  ┌─────────────▼────────────────┐                          │
+│  │  Mouse Boundary Handler       │                          │
+│  │  (Edge clamping)              │                          │
+│  └─────────────┬────────────────┘                          │
+│                │                                           │
+│  ┌─────────────▼────────────────┐                          │
+│  │  Scan Code → HID Mapping      │                          │
+│  │  (scancode_to_hid.h tables)   │                          │
+│  └─────────────┬────────────────┘                          │
+│                │                                           │
+│  ┌─────────────▼────────────────┐                          │
+│  │  BLE HID over GATT (primary)  │                          │
+│  │  ┌────────────┐ ┌──────────┐ │                          │
+│  │  │ HID Service │ │ DevInfo  │ │                          │
+│  │  │ 0x1812      │ │ Battery  │ │                          │
+│  │  └────────────┘ └──────────┘ │                          │
+│  ├───────────────────────────────┤                          │
+│  │  BT Classic HID (fallback)    │                          │
+│  │  ┌──────────┐ ┌───────────┐  │                          │
+│  │  │ L2CAP    │ │ SDP       │  │                          │
+│  │  └──────────┘ └───────────┘  │                          │
+│  └─────────────┬────────────────┘                          │
+│                │ Bluetooth                                 │
+└────────────────┼───────────────────────────────────────────┘
                  │
                  ▼
     ┌────────────────────────┐
     │  Client Device          │
     │  (Phone/Tablet/TV/PC)   │
-    │  Standard BT HID        │
+    │  Standard BLE/BT HID    │
     │  No software install    │
     └────────────────────────┘
 ```
@@ -145,27 +155,32 @@ cmake --build . --config Release
 
 ```
 CursorShare/
-├── CMakeLists.txt              # Build system
+├── CMakeLists.txt              # Build system (C++20, NMake)
 ├── README.md                   # This file
+├── dist/                       # Pre-built executables
 ├── docs/                       # Documentation
 ├── src/
-│   ├── main.cpp                # Entry point
+│   ├── main.cpp                # Entry point + interactive console
 │   ├── common/                 # Shared headers
 │   │   ├── constants.h         # Project-wide constants
 │   │   ├── hid_descriptors.h   # HID report descriptors
 │   │   ├── input_event.h       # Input event structures
 │   │   ├── ipc_protocol.h      # IPC definitions
-│   │   └── ring_buffer.h       # Lock-free SPSC ring buffer
+│   │   ├── logger.h/cpp        # Thread-safe file logger
+│   │   ├── ring_buffer.h       # Lock-free SPSC ring buffer
+│   │   ├── scancode_to_hid.h   # Windows → HID usage code tables
+│   │   └── win_headers.h       # Centralized Windows includes
 │   ├── bluetooth/              # Bluetooth subsystem
+│   │   ├── ble_hid_service.*   # BLE HID over GATT (C++/WinRT)
 │   │   ├── bt_validator.*      # Adapter validation
-│   │   ├── bt_hid_service.*    # HID service manager
+│   │   ├── bt_hid_service.*    # Classic HID service
 │   │   └── bt_pairing.*        # Pairing preservation
 │   ├── input/                  # Input capture subsystem
-│   │   ├── raw_input_capture.* # Raw Input API
+│   │   ├── raw_input_capture.* # Raw Input API + exclusive hooks
 │   │   ├── input_router.*      # Host/Client routing
-│   │   ├── shortcut_manager.*  # Global shortcut
+│   │   ├── shortcut_manager.*  # Global shortcut (Ctrl+Alt+S)
 │   │   └── mouse_boundary.*    # Boundary-aware mouse
-│   ├── driver/                 # KMDF filter drivers
+│   ├── driver/                 # KMDF filter drivers (optional)
 │   │   ├── kbfilter/           # Keyboard filter
 │   │   └── moufilter/          # Mouse filter
 │   └── service/                # Service layer
@@ -177,18 +192,22 @@ CursorShare/
 └── tests/                      # Test suite
 ```
 
-## Building KMDF Drivers
+## Logging
 
-Kernel drivers require the **Windows Driver Kit (WDK)** and must be built separately:
+CursorShare uses a centralized file-based logger that writes to `cursorshare.log` next to the executable.
 
-1. Open the driver project in Visual Studio with WDK installed
-2. Select **x64 Release** configuration
-3. Build the project
-4. Enable test-signing: `bcdedit /set testsigning on`
-5. Sign with test certificate: `signtool sign /v /s PrivateCertStore /n CursorShareTest /t http://timestamp.digicert.com *.sys`
-6. Install via INF: `devcon install kbfilter.inf *whatever_hwid*`
+- **6 log levels**: Trace, Debug, Info, Warn, Error, Fatal
+- **Log rotation**: 5 MB max per file, keeps 3 rotated backups
+- **Thread-safe**: Mutex-protected writes with millisecond timestamps
+- **Console mirror**: All log entries are also printed to the console
+- **Hot-path excluded**: Individual mouse/keyboard event data is not logged (too noisy)
 
-See `docs/driver-signing-guide.md` for detailed instructions.
+Example log output:
+```
+[2026-03-05 04:50:42.123] [INFO ] [BLE-HID] BLE HID Service initialized.
+[2026-03-05 04:50:43.456] [INFO ] [Router] Switched to CLIENT mode.
+[2026-03-05 04:50:43.457] [INFO ] [Input ] Exclusive mode ENABLED — host input suppressed.
+```
 
 ## HID Descriptors
 
@@ -205,13 +224,35 @@ CursorShare implements two HID report descriptors:
 - Vertical scroll wheel
 - Horizontal scroll wheel (AC Pan)
 
+## BLE GATT Services
+
+| Service | UUID | Purpose |
+|---------|------|---------|
+| HID Service | `0x1812` | Keyboard + Mouse reports, Report Map, HID Info, Control Point |
+| Device Information | `0x180A` | Manufacturer, Model, PnP ID |
+| Battery Service | `0x180F` | Battery level (fixed at 100%) |
+
 ## Safety Guarantees
 
+- **Exclusive input**: Low-level hooks ensure input goes to only one device at a time
 - **Paired-device preservation**: Snapshots paired devices on startup, verifies on shutdown
 - **Input restoration**: All hooks and filters fully removed on exit
-- **Bluetooth cleanup**: L2CAP channels closed, SDP records unregistered, discoverability restored
+- **Bluetooth cleanup**: GATT services stopped, L2CAP channels closed, SDP records unregistered
 - **No persistent changes**: Default Windows behavior fully restored on exit
-- **Deterministic shutdown**: Verified cleanup sequence with error reporting
+- **Deterministic shutdown**: Verified cleanup sequence with error reporting to log file
+
+## Building KMDF Drivers
+
+Kernel drivers require the **Windows Driver Kit (WDK)** and must be built separately:
+
+1. Open the driver project in Visual Studio with WDK installed
+2. Select **x64 Release** configuration
+3. Build the project
+4. Enable test-signing: `bcdedit /set testsigning on`
+5. Sign with test certificate
+6. Install via INF
+
+See `docs/driver-signing-guide.md` for detailed instructions.
 
 ## License
 
