@@ -230,13 +230,17 @@ See `docs/driver-signing-guide.md` for detailed instructions.
 
 This project is licensed under the **CursorShare Custom License (CSCL v1.0)**.
 
+ **Attribution**  - Credit to the original author (**MdSami89**) is mandatory in all copies and forks.
 
- **Attribution**  - Credit to the original author (**MdSami89**) is mandatory in all copies and forks 
- **Commercial Use** - Prohibited without prior  permission 
- **Forking** - Allowed - original author and repo link must remain visible 
- **Redistribution** - Re-uploading as your own work is not allowed 
- **Modification** - Allowed — must be clearly marked as modified 
- **Warranty** - Provided "as is" with no warranty of any kind 
+ **Commercial Use** - Prohibited without prior  permission.
+ 
+ **Forking** - Allowed - original author and repo link must remain visible.
+
+ **Redistribution** - Re-uploading as your own work is not allowed.
+
+ **Modification** - Allowed — must be clearly marked as modified.
+
+ **Warranty** - Provided "as is" with no warranty of any kind. 
 
 See [LICENSE](LICENSE) and [NOTICE](NOTICE) for full terms.
 
