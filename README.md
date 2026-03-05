@@ -254,6 +254,24 @@ Kernel drivers require the **Windows Driver Kit (WDK)** and must be built separa
 
 See `docs/driver-signing-guide.md` for detailed instructions.
 
-## License
+## License & Attribution
 
-This project is proprietary. All rights reserved.
+This project is licensed under the **CursorShare Custom License (CSCL v1.0)**.
+
+| Term | Rule |
+|------|------|
+| **Attribution** | Credit to the original author (**MdSami89**) is mandatory in all copies and forks |
+| **Commercial Use** | ❌ Prohibited without prior written permission |
+| **Forking** | ✅ Allowed — original author and repo link must remain visible |
+| **Redistribution** | ❌ Re-uploading as your own work is not allowed |
+| **Modification** | ✅ Allowed — must be clearly marked as modified |
+| **Warranty** | Provided "as is" with no warranty of any kind |
+
+See [LICENSE](LICENSE) and [NOTICE](NOTICE) for full terms.
+
+### Author
+
+**Mohammad Sami** ([@MdSami89](https://github.com/MdSami89))
+
+For commercial licensing, permissions, or inquiries:
+[github.com/MdSami89](https://github.com/MdSami89)
