@@ -1,0 +1,61 @@
+;
+; CursorShare Mouse Filter Driver INF
+;
+
+[Version]
+Signature   = "$Windows NT$"
+Class       = Mouse
+ClassGuid   = {4D36E96F-E325-11CE-BFC1-08002BE10318}
+Provider    = %ProviderString%
+DriverVer   = 03/05/2026,1.0.0.0
+CatalogFile = CursorShareMouFilter.cat
+
+[DestinationDirs]
+DefaultDestDir = 12
+
+[SourceDisksNames]
+1 = %DiskId1%,,,""
+
+[SourceDisksFiles]
+CursorShareMouFilter.sys = 1,,
+
+[Manufacturer]
+%ProviderString% = Standard,NTamd64
+
+[Standard.NTamd64]
+
+[CursorShareMouFilter_Inst]
+CopyFiles = CursorShareMouFilter_CopyFiles
+
+[CursorShareMouFilter_CopyFiles]
+CursorShareMouFilter.sys
+
+[CursorShareMouFilter_Inst.HW]
+AddReg = CursorShareMouFilter_AddReg
+
+[CursorShareMouFilter_AddReg]
+HKR,,"UpperFilters",0x00010008,"CursorShareMouFilter"
+
+[CursorShareMouFilter_Inst.Services]
+AddService = CursorShareMouFilter,,CursorShareMouFilter_Service_Inst
+
+[CursorShareMouFilter_Service_Inst]
+DisplayName    = %ServiceDesc%
+ServiceType    = %SERVICE_KERNEL_DRIVER%
+StartType      = %SERVICE_DEMAND_START%
+ErrorControl   = %SERVICE_ERROR_NORMAL%
+ServiceBinary  = %12%\CursorShareMouFilter.sys
+
+[CursorShareMouFilter_Inst.Wdf]
+KmdfService = CursorShareMouFilter, CursorShareMouFilter_wdfsect
+
+[CursorShareMouFilter_wdfsect]
+KmdfLibraryVersion = 1.15
+
+[Strings]
+ProviderString      = "CursorShare"
+ServiceDesc         = "CursorShare Mouse Filter Driver"
+DiskId1             = "CursorShare Installation Disk"
+SERVICE_KERNEL_DRIVER = 1
+SERVICE_DEMAND_START  = 3
+SERVICE_ERROR_NORMAL  = 1

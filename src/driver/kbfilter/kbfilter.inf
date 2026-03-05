@@ -1,0 +1,68 @@
+;
+; CursorShare Keyboard Filter Driver INF
+;
+
+[Version]
+Signature   = "$Windows NT$"
+Class       = Keyboard
+ClassGuid   = {4D36E96B-E325-11CE-BFC1-08002BE10318}
+Provider    = %ProviderString%
+DriverVer   = 03/05/2026,1.0.0.0
+CatalogFile = CursorShareKbFilter.cat
+
+[DestinationDirs]
+DefaultDestDir = 12  ; DIRID_DRIVERS
+
+[SourceDisksNames]
+1 = %DiskId1%,,,""
+
+[SourceDisksFiles]
+CursorShareKbFilter.sys = 1,,
+
+; ===================== Class Install Section =====================
+[Manufacturer]
+%ProviderString% = Standard,NTamd64
+
+[Standard.NTamd64]
+; Install as upper filter - entries are added via registry
+
+; ===================== Filter Install =====================
+[CursorShareKbFilter_Inst]
+CopyFiles = CursorShareKbFilter_CopyFiles
+
+[CursorShareKbFilter_CopyFiles]
+CursorShareKbFilter.sys
+
+[CursorShareKbFilter_Inst.HW]
+AddReg = CursorShareKbFilter_AddReg
+
+[CursorShareKbFilter_AddReg]
+; Add as upper class filter for keyboard class
+HKR,,"UpperFilters",0x00010008,"CursorShareKbFilter"
+
+; ===================== Service Install =====================
+[CursorShareKbFilter_Inst.Services]
+AddService = CursorShareKbFilter,,CursorShareKbFilter_Service_Inst
+
+[CursorShareKbFilter_Service_Inst]
+DisplayName    = %ServiceDesc%
+ServiceType    = %SERVICE_KERNEL_DRIVER%
+StartType      = %SERVICE_DEMAND_START%
+ErrorControl   = %SERVICE_ERROR_NORMAL%
+ServiceBinary  = %12%\CursorShareKbFilter.sys
+
+; ===================== WDF Co-Installer =====================
+[CursorShareKbFilter_Inst.Wdf]
+KmdfService = CursorShareKbFilter, CursorShareKbFilter_wdfsect
+
+[CursorShareKbFilter_wdfsect]
+KmdfLibraryVersion = 1.15
+
+; ===================== Strings =====================
+[Strings]
+ProviderString      = "CursorShare"
+ServiceDesc         = "CursorShare Keyboard Filter Driver"
+DiskId1             = "CursorShare Installation Disk"
+SERVICE_KERNEL_DRIVER = 1
+SERVICE_DEMAND_START  = 3
+SERVICE_ERROR_NORMAL  = 1
