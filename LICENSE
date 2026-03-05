@@ -1,0 +1,84 @@
+CursorShare Custom License (CSCL v1.0)
+
+Copyright (c) 2026 Mohammad Sami (MdSami89)
+https://github.com/MdSami89/CursorShare
+
+All rights reserved unless otherwise stated below.
+
+===============================================================================
+                              GRANT OF RIGHTS
+===============================================================================
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to use,
+study, modify, and share the Software subject to the following conditions:
+
+1. ATTRIBUTION REQUIRED
+   All copies, forks, or derivative works of this Software must retain this
+   license file, all copyright notices, and clear attribution to the original
+   author (Mohammad Sami / MdSami89) and the original repository:
+   https://github.com/MdSami89/CursorShare
+
+2. COMMERCIAL USE PROHIBITED WITHOUT PERMISSION
+   The Software may NOT be used, in whole or in part, for commercial purposes
+   without prior written permission from the copyright holder. Commercial
+   purposes include, but are not limited to: selling the Software, bundling
+   it with paid products, using it in commercial services, or monetizing
+   derivative works in any form.
+
+   To request commercial use permission, contact: github.com/MdSami89
+
+3. FORKING AND MODIFICATION
+   Forking and modification of the Software are permitted provided that:
+   (a) The original author, copyright notice, and repository link remain
+       clearly visible in the forked project's README, LICENSE, and source
+       file headers.
+   (b) Modified versions are clearly marked as such and must not be
+       represented as the original Software.
+   (c) This license (CSCL v1.0) is retained in all copies and derivatives.
+
+4. NO REDISTRIBUTION AS OWN WORK
+   Re-uploading, redistributing, or publishing this Software (or substantial
+   portions of it) under a different name, author, or without proper
+   attribution is strictly prohibited. This includes, but is not limited to:
+   (a) Uploading to package registries, app stores, or software repositories
+       without attribution.
+   (b) Claiming authorship or ownership of the Software or its derivatives.
+   (c) Removing or altering copyright notices, watermarks, or attribution.
+
+5. CONTRIBUTIONS
+   By submitting contributions (pull requests, patches, etc.) to the original
+   repository, you agree to license your contributions under the same terms
+   as this license, and you grant the original author a perpetual,
+   non-exclusive right to use your contributions.
+
+===============================================================================
+                           DISCLAIMER OF WARRANTY
+===============================================================================
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT.
+
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+DAMAGES, OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR
+OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE
+USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+THE AUTHOR ASSUMES NO RESPONSIBILITY FOR ANY DAMAGE CAUSED BY THE USE OR
+MISUSE OF THIS SOFTWARE, INCLUDING BUT NOT LIMITED TO DATA LOSS, SYSTEM
+DAMAGE, SECURITY VULNERABILITIES, OR BLUETOOTH HARDWARE ISSUES.
+
+===============================================================================
+                              ENFORCEMENT
+===============================================================================
+
+Violation of any of the above terms will result in immediate termination of
+the rights granted under this license. The copyright holder reserves the
+right to pursue legal remedies for any breach of these terms.
+
+===============================================================================
+
+For questions, permissions, or commercial licensing inquiries:
+  GitHub: https://github.com/MdSami89
+  Project: https://github.com/MdSami89/CursorShare

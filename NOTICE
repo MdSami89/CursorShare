@@ -1,0 +1,55 @@
+================================================================================
+                         CursorShare — NOTICE
+================================================================================
+
+Project:    CursorShare
+Author:     Mohammad Sami (MdSami89)
+Repository: https://github.com/MdSami89/CursorShare
+License:    CursorShare Custom License (CSCL v1.0)
+Copyright:  (c) 2026 Mohammad Sami. All rights reserved.
+
+================================================================================
+                         OWNERSHIP STATEMENT
+================================================================================
+
+CursorShare is the original work of Mohammad Sami (GitHub: MdSami89).
+All source code, documentation, architecture, and design in this repository
+are owned by the copyright holder unless explicitly stated otherwise.
+
+================================================================================
+                      COMMERCIAL USE RESTRICTION
+================================================================================
+
+Commercial use of this software — including but not limited to selling,
+bundling with paid products, using in commercial services, or monetizing
+derivative works — is STRICTLY PROHIBITED without prior written permission
+from the copyright holder.
+
+For commercial licensing inquiries, contact: https://github.com/MdSami89
+
+================================================================================
+                         ATTRIBUTION REQUIRED
+================================================================================
+
+If you fork, modify, or redistribute this software, you MUST:
+
+  1. Retain this NOTICE file
+  2. Retain the LICENSE file (CSCL v1.0)
+  3. Credit the original author (Mohammad Sami / MdSami89)
+  4. Link to the original repository:
+     https://github.com/MdSami89/CursorShare
+
+================================================================================
+                         THIRD-PARTY NOTICES
+================================================================================
+
+This software uses the following third-party technologies:
+
+  - Windows SDK (Microsoft)
+  - C++/WinRT (Microsoft, MIT License)
+  - Bluetooth HID specification (Bluetooth SIG)
+
+These are used under their respective licenses and are not bundled with
+this project.
+
+================================================================================

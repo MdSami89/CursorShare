@@ -57,7 +57,7 @@ cmake .. -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Release
 cmake --build . --config Release
 ```
 
-Pre-built executables are also available, You can download From [Releases](https://github.com/MdSami89/CursorShare/releases)
+## Pre-built executables are also available, You can download From [Releases](https://github.com/MdSami89/CursorShare/releases)
 
 ### Run
 
