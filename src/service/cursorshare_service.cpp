@@ -84,7 +84,10 @@ bool CursorShareService::StartBroadcast() {
 
   // Start Bluetooth listening
   if (!btService_.StartListening()) {
-    LOG_ERROR("Service", "Failed to start BT listening");
+    LOG_ERROR("Service",
+              "Failed to start BT Classic broadcast. Classic HID requires "
+              "reserved PSM ports (0x0011/0x0013) which Windows blocks from "
+              "user-space. Use the 'ble' command for BLE HID instead.");
     broadcastState_.store(BroadcastState::Error, std::memory_order_release);
     return false;
   }
@@ -128,20 +131,24 @@ bool CursorShareService::StartBleBroadcast() {
   }
 
   // Set BLE device event callback
-  bleService_.SetDeviceCallback(
-      [this](const std::string &deviceId, bool connected) {
-        if (connected) {
-          router_.OnClientConnected();
-          // Enable exclusive mode — input goes only to client
-          rawInput_.SetExclusiveMode(true);
-          LOG_INFO("Service", "BLE device connected: %s", deviceId.c_str());
-        } else {
-          router_.OnClientDisconnected();
-          // Disable exclusive mode — input returns to host
-          rawInput_.SetExclusiveMode(false);
-          LOG_INFO("Service", "BLE device disconnected: %s", deviceId.c_str());
-        }
-      });
+  bleService_.SetDeviceCallback([this](const std::string &deviceId,
+                                       bool connected) {
+    if (connected) {
+      router_.OnClientConnected();
+      // Do NOT auto-enable exclusive mode here!
+      // User must explicitly switch via Ctrl+Alt+S or 'switch' command.
+      // This prevents lockout if BLE connects but input doesn't work.
+      LOG_INFO("Service",
+               "BLE device connected: %s — press Ctrl+Alt+S to switch input",
+               deviceId.c_str());
+    } else {
+      // On disconnect, always release exclusive mode and return to host
+      rawInput_.SetExclusiveMode(false);
+      router_.OnClientDisconnected();
+      LOG_INFO("Service", "BLE device disconnected: %s — switched to host",
+               deviceId.c_str());
+    }
+  });
 
   // Start advertising
   if (!bleService_.StartAdvertising()) {
@@ -192,7 +199,7 @@ void CursorShareService::StopBroadcast() {
   broadcastState_.store(BroadcastState::Stopping, std::memory_order_release);
 
   // Switch to host mode first (flush state)
-  router_.SwitchToHost();
+  SwitchToHost();
 
   // Stop input capture
   rawInput_.Stop();
@@ -294,15 +301,9 @@ void CursorShareService::OnInputEvent(const InputEvent &event) {
 void CursorShareService::OnClientOutput(const InputEvent &event) {
   int64_t encodeStart = GetQPCTimestamp();
 
-  // Apply mouse boundary clamping for mouse events
+  // HID mouse uses relative movement — the client OS handles its own cursor
+  // boundaries. No host-side clamping needed.
   InputEvent processedEvent = event;
-  if (event.type == InputEventType::MouseMove) {
-    int16_t clampedDx, clampedDy;
-    mouseBoundary_.ApplyMovement(event.data.mouse.dx, event.data.mouse.dy,
-                                 clampedDx, clampedDy);
-    processedEvent.data.mouse.dx = clampedDx;
-    processedEvent.data.mouse.dy = clampedDy;
-  }
 
   int64_t encodeEnd = GetQPCTimestamp();
   latencyMonitor_.RecordSample(PipelineStage::HidEncoding, encodeStart,
@@ -332,14 +333,16 @@ void CursorShareService::OnDeviceEvent(const ConnectedDevice &device,
                                        bool connected) {
   if (connected) {
     router_.OnClientConnected();
-    // Enable exclusive mode — input goes only to client
-    rawInput_.SetExclusiveMode(true);
-    LOG_INFO("Service", "Device connected: %s", device.name.c_str());
+    // Do NOT auto-enable exclusive mode — user must switch manually
+    LOG_INFO("Service",
+             "Device connected: %s — press Ctrl+Alt+S to switch input",
+             device.name.c_str());
   } else {
-    router_.OnClientDisconnected();
-    // Disable exclusive mode — input returns to host
+    // On disconnect, release exclusive mode and return to host
     rawInput_.SetExclusiveMode(false);
-    LOG_INFO("Service", "Device disconnected: %s", device.name.c_str());
+    router_.OnClientDisconnected();
+    LOG_INFO("Service", "Device disconnected: %s — switched to host",
+             device.name.c_str());
   }
 }
 

@@ -30,6 +30,7 @@ namespace CursorShare {
 namespace winrt_gatt =
     winrt::Windows::Devices::Bluetooth::GenericAttributeProfile;
 namespace winrt_bt = winrt::Windows::Devices::Bluetooth;
+namespace winrt_ble_adv = winrt::Windows::Devices::Bluetooth::Advertisement;
 namespace winrt_streams = winrt::Windows::Storage::Streams;
 
 /// BLE connection info.
@@ -147,6 +148,9 @@ private:
   // WinRT event tokens for cleanup
   winrt::event_token keyboardSubscribedToken_;
   winrt::event_token mouseSubscribedToken_;
+
+  // BLE name advertisement publisher
+  winrt_ble_adv::BluetoothLEAdvertisementPublisher namePublisher_{nullptr};
 };
 
 } // namespace CursorShare

@@ -13,8 +13,14 @@ namespace CursorShare {
 // Window class name for the hidden message-only window
 static const wchar_t *kWindowClassName = L"CursorShareRawInputSink";
 
-// Store 'this' pointer for the static WndProc
-static thread_local RawInputCapture *g_instance = nullptr;
+// Custom window messages to marshal hook install/remove to message pump thread
+static constexpr UINT WM_INSTALL_HOOKS = WM_APP + 1;
+static constexpr UINT WM_REMOVE_HOOKS = WM_APP + 2;
+
+// Store 'this' pointer for the static WndProc and LL hook callbacks.
+// NOT thread_local — LL hooks are called from the OS on the thread that
+// installed them, and we need them to find the instance from any callsite.
+static RawInputCapture *g_instance = nullptr;
 
 // ---------------------------------------------------------------------------
 // Constructor / Destructor
@@ -150,6 +156,16 @@ LRESULT CALLBACK RawInputCapture::WndProc(HWND hwnd, UINT msg, WPARAM wParam,
     }
     return 0;
   }
+  case WM_INSTALL_HOOKS:
+    if (g_instance) {
+      g_instance->InstallHooks();
+    }
+    return 0;
+  case WM_REMOVE_HOOKS:
+    if (g_instance) {
+      g_instance->RemoveHooks();
+    }
+    return 0;
   case WM_CLOSE:
     PostQuitMessage(0);
     return 0;
@@ -268,6 +284,13 @@ void RawInputCapture::ProcessRawInput(HRAWINPUT hRawInput) {
 // ProcessKeyboard
 // ---------------------------------------------------------------------------
 void RawInputCapture::ProcessKeyboard(const RAWKEYBOARD &kb) {
+  // In exclusive mode, keyboard events are captured directly by the LL hook
+  // callback to avoid the WM_INPUT suppression issue. Skip here to prevent
+  // duplicate events.
+  if (exclusiveActive_.load(std::memory_order_acquire)) {
+    return;
+  }
+
   InputEvent event = {};
   event.timestamp = GetQPCTimestamp();
   event.sequence = sequenceCounter_.fetch_add(1, std::memory_order_relaxed);
@@ -424,10 +447,20 @@ void RawInputCapture::ProcessMouse(const RAWMOUSE &mouse) {
 // ---------------------------------------------------------------------------
 void RawInputCapture::SetExclusiveMode(bool exclusive) {
   if (exclusive && !exclusiveActive_.load(std::memory_order_acquire)) {
-    InstallHooks();
+    // Marshal to the message pump thread — LL hooks MUST be installed on a
+    // thread with an active message loop, otherwise they silently fail.
+    if (hwnd_) {
+      PostMessageW(hwnd_, WM_INSTALL_HOOKS, 0, 0);
+    } else {
+      InstallHooks(); // Fallback if window not yet created
+    }
     LOG_INFO("Input", "Exclusive mode ENABLED — host input suppressed.");
   } else if (!exclusive && exclusiveActive_.load(std::memory_order_acquire)) {
-    RemoveHooks();
+    if (hwnd_) {
+      PostMessageW(hwnd_, WM_REMOVE_HOOKS, 0, 0);
+    } else {
+      RemoveHooks();
+    }
     LOG_INFO("Input", "Exclusive mode DISABLED — host input restored.");
   }
 }
@@ -471,26 +504,181 @@ void RawInputCapture::RemoveHooks() {
 }
 
 // ---------------------------------------------------------------------------
-// LowLevelKeyboardProc — swallow keyboard input when exclusive
+// LowLevelKeyboardProc — In exclusive mode, captures keyboard events directly
+// and feeds them to the BLE pipeline (bypassing WM_INPUT which gets blocked
+// when the hook swallows input). Then returns 1 to suppress on the host.
 // ---------------------------------------------------------------------------
 LRESULT CALLBACK RawInputCapture::LowLevelKeyboardProc(int nCode, WPARAM wParam,
                                                        LPARAM lParam) {
   if (nCode == HC_ACTION && g_instance &&
       g_instance->exclusiveActive_.load(std::memory_order_acquire)) {
-    // Swallow the input — don't pass to next hook or OS
+
+    KBDLLHOOKSTRUCT *kb = reinterpret_cast<KBDLLHOOKSTRUCT *>(lParam);
+    bool isDown = (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN);
+
+    // Use GetAsyncKeyState for reliable modifier detection
+    bool ctrlHeld = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+    bool altHeld = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+
+    // === SAFETY: Ctrl+Alt+S — toggle host/client ===
+    if (ctrlHeld && altHeld && kb->vkCode == 'S') {
+      return CallNextHookEx(nullptr, nCode, wParam, lParam);
+    }
+
+    // === SAFETY: Ctrl+Alt+Q — EMERGENCY KILL ===
+    if (ctrlHeld && altHeld && kb->vkCode == 'Q' && isDown) {
+      g_instance->exclusiveActive_.store(false, std::memory_order_release);
+      if (g_instance->hwnd_) {
+        PostMessageW(g_instance->hwnd_, WM_REMOVE_HOOKS, 0, 0);
+      }
+      LOG_WARN("Input",
+               "EMERGENCY: Exclusive mode force-disabled via Ctrl+Alt+Q");
+      return CallNextHookEx(nullptr, nCode, wParam, lParam);
+    }
+
+    // === SAFETY: Ctrl+Shift+Esc — Task Manager ===
+    bool shiftHeld = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+    if (ctrlHeld && shiftHeld && kb->vkCode == VK_ESCAPE) {
+      return CallNextHookEx(nullptr, nCode, wParam, lParam);
+    }
+
+    // --- Capture the keyboard event directly from the hook ---
+    // Since swallowing (return 1) blocks WM_INPUT on some Windows versions,
+    // we create the InputEvent here and feed it to the callback ourselves.
+    InputEvent event = {};
+    event.timestamp = GetQPCTimestamp();
+    event.sequence =
+        g_instance->sequenceCounter_.fetch_add(1, std::memory_order_relaxed);
+    event.type = isDown ? InputEventType::KeyDown : InputEventType::KeyUp;
+    event.data.keyboard.scanCode = static_cast<uint16_t>(kb->scanCode);
+    event.data.keyboard.virtualKey = static_cast<uint16_t>(kb->vkCode);
+    event.data.keyboard.flags = 0;
+    // LLKHF_EXTENDED corresponds to the E0 scan code prefix
+    if (kb->flags & LLKHF_EXTENDED) {
+      event.data.keyboard.flags |= 0x01;
+    }
+
+    g_instance->ringBuffer_.TryPush(event);
+    g_instance->totalEvents_.fetch_add(1, std::memory_order_relaxed);
+    if (g_instance->callback_) {
+      g_instance->callback_(event);
+    }
+
+    // === MODIFIER KEYS: must pass through to OS to prevent stuck state ===
+    // When Ctrl+Alt+S is pressed to switch to client mode, hooks are installed
+    // while Ctrl/Alt are still held. If we swallow their key-UP events, the OS
+    // thinks they're permanently held down, causing any later 'S' press to
+    // look like Ctrl+Alt+S and re-trigger the toggle.
+    // Fix: capture modifiers for BLE (done above) but ALSO let them through.
+    if (kb->vkCode == VK_LCONTROL || kb->vkCode == VK_RCONTROL ||
+        kb->vkCode == VK_LMENU || kb->vkCode == VK_RMENU ||
+        kb->vkCode == VK_LSHIFT || kb->vkCode == VK_RSHIFT ||
+        kb->vkCode == VK_LWIN || kb->vkCode == VK_RWIN ||
+        kb->vkCode == VK_CONTROL || kb->vkCode == VK_MENU ||
+        kb->vkCode == VK_SHIFT) {
+      return CallNextHookEx(nullptr, nCode, wParam, lParam);
+    }
+
+    // Swallow regular keys on the host — keyboard goes to client only
     return 1;
   }
   return CallNextHookEx(nullptr, nCode, wParam, lParam);
 }
 
 // ---------------------------------------------------------------------------
-// LowLevelMouseProc — swallow mouse input when exclusive
+// LowLevelMouseProc — In exclusive mode, captures button and wheel events
+// directly (since swallowing may prevent WM_INPUT for those on some systems).
+// Mouse MOVEMENT is left to WM_INPUT/ProcessMouse since computing deltas
+// from the hook's absolute pt coordinates is unreliable when the cursor
+// is frozen by swallowing.
 // ---------------------------------------------------------------------------
 LRESULT CALLBACK RawInputCapture::LowLevelMouseProc(int nCode, WPARAM wParam,
                                                     LPARAM lParam) {
   if (nCode == HC_ACTION && g_instance &&
       g_instance->exclusiveActive_.load(std::memory_order_acquire)) {
-    // Swallow the input — don't pass to next hook or OS
+
+    MSLLHOOKSTRUCT *ms = reinterpret_cast<MSLLHOOKSTRUCT *>(lParam);
+    int64_t timestamp = GetQPCTimestamp();
+    uint16_t seq =
+        g_instance->sequenceCounter_.fetch_add(1, std::memory_order_relaxed);
+
+    // --- Track button state from hook wParam ---
+    bool isButtonEvent = false;
+    switch (wParam) {
+    case WM_LBUTTONDOWN:
+      g_instance->mouseButtons_ |= 0x01;
+      isButtonEvent = true;
+      break;
+    case WM_LBUTTONUP:
+      g_instance->mouseButtons_ &= ~0x01;
+      isButtonEvent = true;
+      break;
+    case WM_RBUTTONDOWN:
+      g_instance->mouseButtons_ |= 0x02;
+      isButtonEvent = true;
+      break;
+    case WM_RBUTTONUP:
+      g_instance->mouseButtons_ &= ~0x02;
+      isButtonEvent = true;
+      break;
+    case WM_MBUTTONDOWN:
+      g_instance->mouseButtons_ |= 0x04;
+      isButtonEvent = true;
+      break;
+    case WM_MBUTTONUP:
+      g_instance->mouseButtons_ &= ~0x04;
+      isButtonEvent = true;
+      break;
+    case WM_XBUTTONDOWN:
+      if (HIWORD(ms->mouseData) == XBUTTON1)
+        g_instance->mouseButtons_ |= 0x08;
+      else if (HIWORD(ms->mouseData) == XBUTTON2)
+        g_instance->mouseButtons_ |= 0x10;
+      isButtonEvent = true;
+      break;
+    case WM_XBUTTONUP:
+      if (HIWORD(ms->mouseData) == XBUTTON1)
+        g_instance->mouseButtons_ &= ~0x08;
+      else if (HIWORD(ms->mouseData) == XBUTTON2)
+        g_instance->mouseButtons_ &= ~0x10;
+      isButtonEvent = true;
+      break;
+    }
+
+    // Emit button events directly from hook
+    if (isButtonEvent) {
+      InputEvent event = {};
+      event.type = (wParam == WM_LBUTTONDOWN || wParam == WM_RBUTTONDOWN ||
+                    wParam == WM_MBUTTONDOWN || wParam == WM_XBUTTONDOWN)
+                       ? InputEventType::MouseButtonDown
+                       : InputEventType::MouseButtonUp;
+      event.timestamp = timestamp;
+      event.sequence = seq;
+      event.data.mouse.buttons = g_instance->mouseButtons_;
+      g_instance->ringBuffer_.TryPush(event);
+      g_instance->totalEvents_.fetch_add(1, std::memory_order_relaxed);
+      if (g_instance->callback_)
+        g_instance->callback_(event);
+    }
+
+    // Emit scroll wheel directly from hook
+    if (wParam == WM_MOUSEWHEEL) {
+      InputEvent event = {};
+      event.type = InputEventType::MouseWheel;
+      event.timestamp = timestamp;
+      event.sequence = seq;
+      event.data.mouse.wheelDelta =
+          static_cast<int16_t>(static_cast<SHORT>(HIWORD(ms->mouseData)));
+      event.data.mouse.buttons = g_instance->mouseButtons_;
+      g_instance->ringBuffer_.TryPush(event);
+      g_instance->totalEvents_.fetch_add(1, std::memory_order_relaxed);
+      if (g_instance->callback_)
+        g_instance->callback_(event);
+    }
+
+    // Mouse MOVEMENT is NOT captured here — it flows through
+    // WM_INPUT → ProcessMouse which has proper relative delta data.
+    // The hook only needs to swallow it on the host.
     return 1;
   }
   return CallNextHookEx(nullptr, nCode, wParam, lParam);

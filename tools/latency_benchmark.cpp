@@ -9,9 +9,11 @@
 #include "../src/input/raw_input_capture.h"
 #include "../src/service/latency_monitor.h"
 #include <chrono>
+#include <conio.h>
 #include <iostream>
 #include <thread>
 #include <windows.h>
+
 
 using namespace CursorShare;
 
@@ -135,5 +137,7 @@ int main() {
   }
 
   std::cout << "Benchmark complete." << std::endl;
+  std::cout << "Press any key to exit..." << std::endl;
+  getch();
   return 0;
 }

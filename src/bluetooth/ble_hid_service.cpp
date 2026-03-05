@@ -501,6 +501,23 @@ bool BleHidService::StartAdvertising() {
     }
 
     state_.store(BleHidState::Advertising, std::memory_order_release);
+
+    // Start a supplementary BLE advertisement publisher to broadcast
+    // the custom device name 'CursorShare'. The GATT server alone
+    // uses the Windows adapter name, which we can't change without
+    // admin privileges. This publisher sets the LocalName in the
+    // advertising data so clients see 'CursorShare'.
+    try {
+      winrt_ble_adv::BluetoothLEAdvertisement adv;
+      adv.LocalName(L"CursorShare");
+      namePublisher_ = winrt_ble_adv::BluetoothLEAdvertisementPublisher(adv);
+      namePublisher_.Start();
+      LOG_INFO("BLE-HID",
+               "Name publisher started — broadcasting as 'CursorShare'.");
+    } catch (const winrt::hresult_error &ex) {
+      LOG_WARN("BLE-HID", "Could not start name publisher (non-fatal).");
+    }
+
     LOG_INFO("BLE-HID", "Advertising as BLE HID device 'CursorShare'...");
     return true;
 
@@ -520,6 +537,15 @@ void BleHidService::Shutdown() {
   }
 
   try {
+    // Stop name publisher
+    if (namePublisher_) {
+      try {
+        namePublisher_.Stop();
+      } catch (...) {
+      }
+      namePublisher_ = nullptr;
+    }
+
     // Stop advertising
     if (hidServiceProvider_) {
       hidServiceProvider_.StopAdvertising();
@@ -678,7 +704,9 @@ bool BleHidService::SendInputEvent(const InputEvent &event) {
   }
 
   case InputEventType::MouseMove:
-    return SendMouseReport(0, event.data.mouse.dx, event.data.mouse.dy, 0, 0);
+    // Must carry button state so click-and-drag works on the client
+    return SendMouseReport(event.data.mouse.buttons, event.data.mouse.dx,
+                           event.data.mouse.dy, 0, 0);
 
   case InputEventType::MouseButtonDown:
   case InputEventType::MouseButtonUp: {

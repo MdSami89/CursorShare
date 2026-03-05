@@ -58,9 +58,24 @@ public:
   void Shutdown();
 
   /// Switch input target.
-  void SwitchToHost() { router_.SwitchToHost(); }
-  void SwitchToClient() { router_.SwitchToClient(); }
-  void ToggleTarget() { router_.Toggle(); }
+  void SwitchToHost() {
+    rawInput_.SetExclusiveMode(false);
+    router_.SwitchToHost();
+  }
+  void SwitchToClient() {
+    router_.SwitchToClient();
+    // Only enable exclusive mode AFTER confirming switch to client
+    if (router_.GetTarget() == RouteTarget::Client) {
+      rawInput_.SetExclusiveMode(true);
+    }
+  }
+  void ToggleTarget() {
+    if (router_.GetTarget() == RouteTarget::Host) {
+      SwitchToClient();
+    } else {
+      SwitchToHost();
+    }
+  }
 
   /// Get status.
   StatusPayload GetStatus() const;
