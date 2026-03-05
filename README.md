@@ -140,8 +140,8 @@ Both tools write to `cursorshare.log` alongside the executable.
 │  │  │ HIDrvice │ │ DevInfo  │ │                          │
 │  │  │ 812      │ │ Battery  │ │                          │
 │  │  ───────────┘ └──────────┘ │                          │
-│  ─────────────────────────────┤                          │
-│  BT Classic HID (fallback)    │                          │
+│  |────────────────────────────┤                          │
+│  |  BT Classic HID (fallback) │                          │
 │  │  ┌──────────┐ ┌───────────┐│                          │
 │  │  │ L2CAP    │ │ SDP       |│                          │
 │  │  └──────────┘ └───────────┘│                          │
