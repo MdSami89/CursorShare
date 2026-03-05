@@ -30,6 +30,13 @@ CursorShare turns a Windows PC into a Bluetooth HID peripheral, forwarding wired
 | BLE GATT notification | 3–7 ms |
 | **Total** | **3–8 ms typical** |
 
+## Tested On
+
+| Role | Device | Status |
+|------|--------|--------|
+| **Host** (Windows PC) | TP-Link UB500 Bluetooth 5.4 Adapter | ✅ Working |
+| **Client** (Tablet) | Samsung Galaxy Tab A9 | ✅ Working |
+
 ## Prerequisites
 
 - **Windows 10/11** (x64)
