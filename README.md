@@ -37,6 +37,9 @@ CursorShare turns a Windows PC into a Bluetooth HID peripheral, forwarding wired
 | **Host** (Windows PC) | TP-Link UB500 Bluetooth 5.4 Adapter | ✅ Working |
 | **Client** (Tablet) | Samsung Galaxy Tab A9 | ✅ Working |
 
+## Project Status
+🚧 In Progress
+
 ## Prerequisites
 
 - **Windows 10/11** (x64)
